@@ -1,6 +1,4 @@
-use bitcoin::{
-    key::Secp256k1, secp256k1, Amount, PrivateKey, ScriptBuf, Txid, XOnlyPublicKey,
-};
+use bitcoin::{key::Secp256k1, secp256k1, Amount, PrivateKey, ScriptBuf, Txid, XOnlyPublicKey};
 use minicbor::{data::Int, Encoder};
 use serde::{Deserialize, Serialize};
 
@@ -19,6 +17,8 @@ pub struct Payload {
     pub fixed_output_script_pubkey: ScriptBuf,
     pub fixed_output_value: Amount,
     pub need_change_fee_output: bool,
+    pub valid_prefix: Option<String>,
+    pub valid_ext: Option<u8>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -105,7 +105,8 @@ pub struct WorkerBitworkInfoCommit {
     pub input_bitwork: String,
     #[serde(rename = "hex_bitwork")]
     pub hex_bitwork: String,
-    pub prefix: String,
+    pub prefix: Option<String>,
+    pub ext: Option<u8>,
 }
 
 impl CopiedData {

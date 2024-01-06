@@ -162,5 +162,7 @@ fn get_payload(mut msg: Root, test_time: Option<u64>, test_nonce: Option<u64>) -
         fixed_output_script_pubkey,
         fixed_output_value: Amount::from_sat(get_output_value_for_commit(msg.fees)),
         need_change_fee_output,
+        valid_prefix: msg.worker_bitwork_info_commit.prefix,
+        valid_ext: msg.worker_bitwork_info_commit.ext,
     })
 }

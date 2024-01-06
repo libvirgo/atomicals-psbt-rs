@@ -1,13 +1,11 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-};
+use std::collections::{BTreeMap, HashMap};
 
 use bitcoin::{
     absolute::LockTime,
     psbt::{Input, Output},
     sighash::{Prevouts, SighashCache},
-    transaction::Version, OutPoint, Psbt, ScriptBuf, Sequence, TapSighashType,
-    Transaction, TxIn, TxOut, Witness,
+    transaction::Version,
+    OutPoint, Psbt, ScriptBuf, Sequence, TapSighashType, Transaction, TxIn, TxOut, Witness,
 };
 
 use crate::{types::Payload, utils};
@@ -112,7 +110,11 @@ pub(crate) fn predicate(seq: u32, payload: &Payload) -> anyhow::Result<bool> {
 
     // EXTRACTOR
     let tx = psbt.extract_tx_unchecked_fee_rate();
-    if has_valid_bitwork(&tx.txid().to_string(), "000000", None) {
+    if has_valid_bitwork(
+        &tx.txid().to_string(),
+        &payload.valid_prefix,
+        &payload.valid_ext,
+    ) {
         println!("Found sequence: {}", seq);
         println!("Txid: {}", tx.txid());
         return Ok(true);
@@ -120,21 +122,23 @@ pub(crate) fn predicate(seq: u32, payload: &Payload) -> anyhow::Result<bool> {
     Ok(false)
 }
 
-fn has_valid_bitwork(txid: &str, bitwork: &str, bitworkx: Option<u8>) -> bool {
-    if txid.starts_with(bitwork) {
-        if let Some(bitworkx_value) = bitworkx {
-            let next_char = txid.chars().nth(bitwork.len());
-            let mut char_map = HashMap::new();
-            for (i, ch) in "0123456789abcdef".chars().enumerate() {
-                char_map.insert(ch, i as u8);
-            }
-            if let Some(next_char_value) = next_char.and_then(|ch| char_map.get(&ch)) {
-                if next_char_value >= &bitworkx_value {
-                    return true;
+fn has_valid_bitwork(txid: &str, bitwork: &Option<String>, bitworkx: &Option<u8>) -> bool {
+    if let Some(bitwork) = bitwork {
+        if txid.starts_with(bitwork.as_str()) {
+            if let Some(bitworkx_value) = bitworkx {
+                let next_char = txid.chars().nth(bitwork.len());
+                let mut char_map = HashMap::new();
+                for (i, ch) in "0123456789abcdef".chars().enumerate() {
+                    char_map.insert(ch, i as u8);
                 }
+                if let Some(next_char_value) = next_char.and_then(|ch| char_map.get(&ch)) {
+                    if next_char_value >= bitworkx_value {
+                        return true;
+                    }
+                }
+            } else {
+                return true;
             }
-        } else {
-            return true;
         }
     }
     false
