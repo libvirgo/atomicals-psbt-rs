@@ -66,7 +66,7 @@ fn main() -> Result<()> {
             ctx.spawn(move |_s| {
                 (seq_start..=seq_end).into_par_iter().find_any(|seq| {
                     if found_clone.load(Ordering::SeqCst) {
-                        return false;
+                        return true;
                     }
                     if seq % 10000 == 0 {
                         println!(
@@ -76,18 +76,24 @@ fn main() -> Result<()> {
                         );
                     }
                     let res = predicate(*seq, &payload);
-                    if res.is_err() {
-                        println!("Error: {:#?}", res.err().unwrap());
-                        return false;
+                    match res {
+                        Ok(have) => {
+                            if have {
+                                found_clone.store(true, Ordering::SeqCst);
+                                result_sequence_clone.store(*seq as u64, Ordering::SeqCst);
+                                result_nonce_clone
+                                    .store(payload.copied_data.args.nonce, Ordering::SeqCst);
+                                result_time_clone
+                                    .store(payload.copied_data.args.time, Ordering::SeqCst);
+                                return true;
+                            }
+                            have
+                        }
+                        Err(err) => {
+                            println!("Error: {:#?}", err);
+                            false
+                        }
                     }
-                    if res.unwrap() {
-                        found_clone.store(true, Ordering::SeqCst);
-                        result_sequence_clone.store(*seq as u64, Ordering::SeqCst);
-                        result_nonce_clone.store(payload.copied_data.args.nonce, Ordering::SeqCst);
-                        result_time_clone.store(payload.copied_data.args.time, Ordering::SeqCst);
-                        return true;
-                    }
-                    false
                 });
             })
         }
