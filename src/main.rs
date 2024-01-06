@@ -5,7 +5,7 @@ use std::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
     },
-    time::{SystemTime, UNIX_EPOCH},
+    time::SystemTime,
 };
 
 use anyhow::Result;
@@ -136,7 +136,7 @@ fn get_payload(mut msg: Root, test_time: Option<u64>, test_nonce: Option<u64>) -
     let private_address = Address::p2tr(&secp, xonly_pubkey, None, Network::Bitcoin);
 
     let total_inputs_value = msg.funding_utxo.value;
-    let total_outputs_value = utils::get_output_value_for_commit(msg.fees);
+    let total_outputs_value = get_output_value_for_commit(msg.fees);
     let calculated_fee = total_inputs_value - total_outputs_value;
     let mut need_change_fee_output = false;
     let expected_fee = msg.fees.commit_fee_only + msg.worker_options.satsbyte * OUTPUT_BYTES_BASE;
