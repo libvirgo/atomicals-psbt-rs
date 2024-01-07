@@ -48,56 +48,59 @@ fn main() -> Result<()> {
     let result_sequence = Arc::new(AtomicU64::new(0));
     let result_nonce = Arc::new(AtomicU64::new(0));
     let result_time = Arc::new(AtomicU64::new(0));
-    rayon::scope(|ctx| {
-        let seq_range_per_worker = worker::MAX_SEQUENCE / msg.concurrency;
-        for i in 0..msg.concurrency {
-            let seq_start = i * seq_range_per_worker;
-            let mut seq_end = seq_start + seq_range_per_worker - 1;
-            if i == msg.concurrency - 1 {
-                seq_end = worker::MAX_SEQUENCE - 1;
-            }
-            let found_clone = Arc::clone(&found);
-            let result_sequence_clone = Arc::clone(&result_sequence);
-            let result_nonce_clone = Arc::clone(&result_nonce);
-            let result_time_clone = Arc::clone(&result_time);
+    let seq_range_per_worker = worker::MAX_SEQUENCE / msg.concurrency;
+    let mut handles = vec![];
 
-            let payload = get_payload(msg.clone(), None, None).unwrap();
-
-            ctx.spawn(move |_s| {
-                (seq_start..=seq_end).into_par_iter().find_any(|seq| {
-                    if found_clone.load(Ordering::SeqCst) {
-                        return true;
-                    }
-                    if seq % 10000 == 0 {
-                        println!(
-                            "Started mining for sequence: {} - {}",
-                            seq,
-                            min(seq + 10000, seq_end)
-                        );
-                    }
-                    let res = predicate(*seq, &payload);
-                    match res {
-                        Ok(have) => {
-                            if have {
-                                found_clone.store(true, Ordering::SeqCst);
-                                result_sequence_clone.store(*seq as u64, Ordering::SeqCst);
-                                result_nonce_clone
-                                    .store(payload.copied_data.args.nonce, Ordering::SeqCst);
-                                result_time_clone
-                                    .store(payload.copied_data.args.time, Ordering::SeqCst);
-                                return true;
-                            }
-                            have
-                        }
-                        Err(err) => {
-                            println!("Error: {:#?}", err);
-                            false
-                        }
-                    }
-                });
-            })
+    for i in 0..msg.concurrency {
+        let seq_start = i * seq_range_per_worker;
+        let mut seq_end = seq_start + seq_range_per_worker - 1;
+        if i == msg.concurrency - 1 {
+            seq_end = worker::MAX_SEQUENCE - 1;
         }
-    });
+        let found_clone = Arc::clone(&found);
+        let result_sequence_clone = Arc::clone(&result_sequence);
+        let result_nonce_clone = Arc::clone(&result_nonce);
+        let result_time_clone = Arc::clone(&result_time);
+
+        let payload = get_payload(msg.clone(), None, None).unwrap();
+
+        let handle = std::thread::spawn(move || {
+            for seq in seq_start..=seq_end {
+                if found_clone.load(Ordering::SeqCst) {
+                    break;
+                }
+                if seq % 10000 == 0 {
+                    println!(
+                        "Started mining for sequence: {} - {}",
+                        seq,
+                        min(seq + 10000, seq_end)
+                    );
+                }
+                let res = predicate(seq, &payload);
+                match res {
+                    Ok(have) => {
+                        if have {
+                            found_clone.store(true, Ordering::SeqCst);
+                            result_sequence_clone.store(seq as u64, Ordering::SeqCst);
+                            result_nonce_clone
+                                .store(payload.copied_data.args.nonce, Ordering::SeqCst);
+                            result_time_clone
+                                .store(payload.copied_data.args.time, Ordering::SeqCst);
+                            break;
+                        }
+                    }
+                    Err(err) => {
+                        println!("Error: {:#?}", err);
+                    }
+                }
+            }
+        });
+        handles.push(handle);
+    }
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
 
     let success = Success {
         sequence: result_sequence.load(Ordering::SeqCst),
