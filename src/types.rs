@@ -1,6 +1,7 @@
 use bitcoin::{key::Secp256k1, secp256k1, Amount, PrivateKey, ScriptBuf, Txid, XOnlyPublicKey};
 use minicbor::{data::Int, Encoder};
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 
 #[derive(Debug, Clone)]
 pub struct Payload {
@@ -33,6 +34,16 @@ pub struct Root {
     pub perform_bitwork_for_commit_tx: bool,
     pub worker_bitwork_info_commit: WorkerBitworkInfoCommit,
     pub concurrency: u32,
+    #[serde(default)]
+    pub network: Network,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum Network {
+    #[default]
+    Bitcoin,
+    Test,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -46,8 +57,8 @@ pub struct CopiedData {
 pub struct Args {
     pub time: u64,
     pub nonce: u64,
-    pub bitworkc: String,
-    pub bitworkr: String,
+    pub bitworkc: Option<String>,
+    pub bitworkr: Option<String>,
     #[serde(rename = "mint_ticker")]
     pub mint_ticker: String,
 }
@@ -113,12 +124,19 @@ impl CopiedData {
     pub fn encode(&self) -> Vec<u8> {
         let buf = vec![];
         let mut encoder = Encoder::new(buf);
+        let mut valid_args = 3;
+        if self.args.bitworkc.is_some() {
+            valid_args += 1;
+        }
+        if self.args.bitworkr.is_some() {
+            valid_args += 1;
+        }
         encoder
             .map(1)
             .unwrap()
             .str("args")
             .unwrap()
-            .map(5)
+            .map(valid_args)
             .unwrap()
             .str("time")
             .unwrap()
@@ -127,19 +145,35 @@ impl CopiedData {
             .str("nonce")
             .unwrap()
             .int(Int::from(self.args.nonce))
-            .unwrap()
-            .str("bitworkc")
-            .unwrap()
-            .str(self.args.bitworkc.as_str())
-            .unwrap()
-            .str("bitworkr")
-            .unwrap()
-            .str(self.args.bitworkr.as_str())
-            .unwrap()
+            .unwrap();
+        if let Some(bitworkc) = &self.args.bitworkc {
+            encoder
+                .str("bitworkc")
+                .unwrap()
+                .str(bitworkc.as_str())
+                .unwrap();
+        }
+        if let Some(bitworkr) = &self.args.bitworkr {
+            encoder
+                .str("bitworkr")
+                .unwrap()
+                .str(bitworkr.as_str())
+                .unwrap();
+        }
+        encoder
             .str("mint_ticker")
             .unwrap()
             .str(self.args.mint_ticker.as_str())
             .unwrap();
         encoder.into_writer()
+    }
+}
+
+impl From<Network> for bitcoin::Network {
+    fn from(network: Network) -> Self {
+        match network {
+            Network::Bitcoin => bitcoin::Network::Bitcoin,
+            Network::Test => bitcoin::Network::Testnet,
+        }
     }
 }

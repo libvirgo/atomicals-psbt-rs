@@ -11,7 +11,7 @@ use std::{
 use anyhow::Result;
 use bitcoin::{
     key::{rand, rand::rngs::OsRng, Keypair},
-    secp256k1, Address, Amount, Network, PrivateKey, XOnlyPublicKey,
+    secp256k1, Address, Amount, PrivateKey, XOnlyPublicKey,
 };
 use rand::Rng;
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
@@ -133,7 +133,7 @@ fn get_payload(mut msg: Root, test_time: Option<u64>, test_nonce: Option<u64>) -
         &msg.worker_options.op_type,
     );
 
-    let private_address = Address::p2tr(&secp, xonly_pubkey, None, Network::Bitcoin);
+    let private_address = Address::p2tr(&secp, xonly_pubkey, None, msg.network.into());
 
     let total_inputs_value = msg.funding_utxo.value;
     let total_outputs_value = get_output_value_for_commit(msg.fees);
