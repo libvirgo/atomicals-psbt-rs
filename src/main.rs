@@ -22,6 +22,8 @@ use crate::{
     utils::get_output_value_for_commit,
     worker::predicate,
 };
+use crate::types::{Args, CopiedData};
+use crate::utils::get_address_by_copied_data;
 
 #[cfg(test)]
 mod test;
@@ -41,71 +43,55 @@ struct Success {
 }
 
 fn main() -> Result<()> {
-    let arg = env::args().nth(1).unwrap();
-    let msg = serde_json::from_str::<Root>(&arg).unwrap();
+    let secp = secp256k1::Secp256k1::new();
+    // TODO change to wif
+    let private_key = PrivateKey::from_wif("")?;
+    let (xonly_pubkey, parity) =
+        XOnlyPublicKey::from_keypair(&Keypair::from_secret_key(&secp, &private_key.inner));
 
-    let found = Arc::new(AtomicBool::new(false));
-    let result_sequence = Arc::new(AtomicU64::new(0));
-    let result_nonce = Arc::new(AtomicU64::new(0));
-    let result_time = Arc::new(AtomicU64::new(0));
-    rayon::scope(|ctx| {
-        let seq_range_per_worker = worker::MAX_SEQUENCE / msg.concurrency;
-        for i in 0..msg.concurrency {
-            let seq_start = i * seq_range_per_worker;
-            let mut seq_end = seq_start + seq_range_per_worker - 1;
-            if i == msg.concurrency - 1 {
-                seq_end = worker::MAX_SEQUENCE - 1;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    // TODO commit nonce
+    let time = AtomicUsize::new(1704172809);
+    let mut nonce = None;
+    while time.load(Ordering::SeqCst) > 0 {
+        nonce = (0..=10000000).into_par_iter().find_any(|i| {
+            if i % 1000000 == 0 {
+                println!(
+                    "Started mining for nonce: {} - {}",
+                    i,
+                    min(i + 1000000, 10000000)
+                );
             }
-            let found_clone = Arc::clone(&found);
-            let result_sequence_clone = Arc::clone(&result_sequence);
-            let result_nonce_clone = Arc::clone(&result_nonce);
-            let result_time_clone = Arc::clone(&result_time);
-
-            let payload = get_payload(msg.clone(), None, None).unwrap();
-
-            ctx.spawn(move |_s| {
-                (seq_start..=seq_end).into_par_iter().find_any(|seq| {
-                    if found_clone.load(Ordering::SeqCst) {
-                        return true;
-                    }
-                    if seq % 10000 == 0 {
-                        println!(
-                            "Started mining for sequence: {} - {}",
-                            seq,
-                            min(seq + 10000, seq_end)
-                        );
-                    }
-                    let res = predicate(*seq, &payload);
-                    match res {
-                        Ok(have) => {
-                            if have {
-                                found_clone.store(true, Ordering::SeqCst);
-                                result_sequence_clone.store(*seq as u64, Ordering::SeqCst);
-                                result_nonce_clone
-                                    .store(payload.copied_data.args.nonce, Ordering::SeqCst);
-                                result_time_clone
-                                    .store(payload.copied_data.args.time, Ordering::SeqCst);
-                                return true;
-                            }
-                            have
-                        }
-                        Err(err) => {
-                            println!("Error: {:#?}", err);
-                            false
-                        }
-                    }
-                });
-            })
+            let current_time = time.load(Ordering::SeqCst);
+            let (addr, _) = get_address_by_copied_data(
+                &secp,
+                &xonly_pubkey,
+                &CopiedData {
+                    args: Args {
+                        time: current_time as u64,
+                        nonce: *i,
+                        bitworkc: Some("000000".to_string()),
+                        bitworkr: Some("6238".to_string()),
+                        mint_ticker: "sophon".to_string(),
+                    },
+                },
+                &String::from("dmt"),
+            );
+            // TODO change to middle wallet address
+            if addr == "" {
+                return true;
+            }
+            false
+        });
+        if nonce.is_none() {
+            println!("time: {} not found nonces...", time.load(Ordering::SeqCst));
+            time.fetch_sub(1, Ordering::SeqCst);
+        } else {
+            break;
         }
-    });
-
-    let success = Success {
-        sequence: result_sequence.load(Ordering::SeqCst),
-        nonce: result_nonce.load(Ordering::SeqCst),
-        time: result_time.load(Ordering::SeqCst),
-        magic: "a87c1c7c-02a2-4d7d-ae59-81b176127c81".to_string(),
-    };
-    println!("{}", serde_json::to_string(&success).unwrap());
+    }
+    println!("nonce {:?} time: {}", nonce, time.load(Ordering::SeqCst));
     Ok(())
 }
 

@@ -116,3 +116,36 @@ fn append_mint_update_reveal_script_by_builder(
     ops = ops.push_opcode(opcodes::all::OP_ENDIF);
     ops.into_script()
 }
+
+#[cfg(test)]
+mod test {
+    use bitcoin::{PrivateKey, secp256k1, XOnlyPublicKey};
+    use bitcoin::key::Keypair;
+    use crate::types::{Args, CopiedData};
+    use crate::utils::get_address_by_copied_data;
+
+    #[test]
+    fn get_address() {
+        let secp = secp256k1::Secp256k1::new();
+        let private_key = PrivateKey::from_wif("KyjcqSYn7bZCNm7cvGwWo8VdXd3tMxy7N9LkvHL8KKhvSqwx5gDa").unwrap();
+        let (xonly_pubkey, parity) =
+            XOnlyPublicKey::from_keypair(&Keypair::from_secret_key(&secp, &private_key.inner));
+        (1704179494-7200..=1704179494).for_each(|time| {
+            let (addr, _) = get_address_by_copied_data(
+                &secp,
+                &xonly_pubkey,
+                &CopiedData {
+                    args: Args {
+                        time: time as u64,
+                        nonce: 10000000,
+                        bitworkc: Some("000000".to_string()),
+                        bitworkr: Some("6238".to_string()),
+                        mint_ticker: "sophon".to_string(),
+                    },
+                },
+                &String::from("dmt"),
+            );
+            println!("addr: {}", addr);
+        });
+    }
+}
